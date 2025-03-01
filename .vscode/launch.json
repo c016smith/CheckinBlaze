@@ -1,0 +1,45 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Launch Client",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build-client",
+      "program": "${workspaceFolder}/src/CheckinBlaze.Client/bin/Debug/net9.0/CheckinBlaze.Client.dll",
+      "args": [],
+      "cwd": "${workspaceFolder}/src/CheckinBlaze.Client",
+      "stopAtEntry": false,
+      "serverReadyAction": {
+        "action": "openExternally",
+        "pattern": "\\bNow listening on:\\s+(https?://\\S+)",
+        "uriFormat": "%s"
+      },
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      }
+    },
+    {
+      "name": "Launch Functions",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build-functions",
+      "program": "${workspaceFolder}/src/CheckinBlaze.Functions/bin/Debug/net9.0/CheckinBlaze.Functions.dll",
+      "args": [],
+      "cwd": "${workspaceFolder}/src/CheckinBlaze.Functions",
+      "stopAtEntry": false,
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      }
+    },
+    {
+      "name": "Launch Both",
+      "type": "compound",
+      "configurations": [
+        "Launch Client",
+        "Launch Functions"
+      ],
+      "stopAll": true
+    }
+  ]
+}

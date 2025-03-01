@@ -1,0 +1,428 @@
+﻿@page "/"
+@using Microsoft.AspNetCore.Components.WebAssembly.Authentication
+@using Microsoft.Graph.Models
+@using CheckinBlaze.Shared.Models
+@using CheckinBlaze.Client.Services
+@inject NavigationManager Navigation
+@inject GraphService GraphService
+@inject CheckInService CheckInService
+@inject ILogger<Home> Logger
+
+<PageTitle>Employee Check-in</PageTitle>
+
+<AuthorizeView>
+    <Authorized>
+        <div class="container mt-4">
+            <div class="row">
+                <div class="col-md-8">
+                    <h1>Employee Emergency Check-in</h1>
+                    <p class="lead">Quickly report your safety status during emergency situations</p>
+
+                    @if (_isLoading)
+                    {
+                        <div class="my-4">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <span class="ms-2">Loading user information...</span>
+                        </div>
+                    }
+                    else if (_currentUser != null)
+                    {
+                        <div class="card mb-4">
+                            <div class="card-body">
+                                <div class="d-flex align-items-center mb-3">
+                                    @if (!string.IsNullOrEmpty(_userPhoto))
+                                    {
+                                        <img src="@_userPhoto" class="rounded-circle me-3" style="width: 64px; height: 64px;" alt="User photo" />
+                                    }
+                                    else
+                                    {
+                                        <div class="rounded-circle bg-secondary d-flex justify-content-center align-items-center me-3" style="width: 64px; height: 64px; color: white;">
+                                            @(_currentUser.DisplayName?.Substring(0, 1).ToUpper() ?? "?")
+                                        </div>
+                                    }
+                                    <div>
+                                        <h3 class="mb-0">Welcome, @_currentUser.DisplayName</h3>
+                                        <p class="text-muted mb-0">@_currentUser.JobTitle</p>
+                                    </div>
+                                </div>
+
+                                <div class="mt-4">
+                                    @if (!_isCheckingIn)
+                                    {
+                                        <button class="btn btn-primary btn-lg" @onclick="InitiateCheckIn">
+                                            <i class="bi bi-check-circle-fill me-2"></i> Check In Now
+                                        </button>
+                                    }
+                                    else
+                                    {
+                                        <div class="card mb-3">
+                                            <div class="card-header bg-primary text-white">
+                                                <h5 class="mb-0">Check-in Details</h5>
+                                            </div>
+                                            <div class="card-body">
+                                                <div class="mb-3">
+                                                    <label class="form-label">Safety Status</label>
+                                                    <div>
+                                                        <div class="form-check form-check-inline">
+                                                            <input class="form-check-input" type="radio" name="safetyStatus" id="statusOk" value="@SafetyStatus.OK" 
+                                                                   checked="@(_safetyStatus == SafetyStatus.OK)" @onchange="() => _safetyStatus = SafetyStatus.OK" />
+                                                            <label class="form-check-label" for="statusOk">
+                                                                I'm OK
+                                                            </label>
+                                                        </div>
+                                                        <div class="form-check form-check-inline">
+                                                            <input class="form-check-input" type="radio" name="safetyStatus" id="statusNeedsHelp" value="@SafetyStatus.NeedsAssistance" 
+                                                                   checked="@(_safetyStatus == SafetyStatus.NeedsAssistance)" @onchange="() => _safetyStatus = SafetyStatus.NeedsAssistance" />
+                                                            <label class="form-check-label" for="statusNeedsHelp">
+                                                                I Need Assistance
+                                                            </label>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div class="mb-3">
+                                                    <label class="form-label">Location Precision</label>
+                                                    <div>
+                                                        <div class="form-check form-check-inline">
+                                                            <input class="form-check-input" type="radio" name="locationPrecision" id="precisionCity" value="@LocationPrecision.CityWide" 
+                                                                   checked="@(_locationPrecision == LocationPrecision.CityWide)" @onchange="() => _locationPrecision = LocationPrecision.CityWide" />
+                                                            <label class="form-check-label" for="precisionCity">
+                                                                City-wide (Less Precise)
+                                                            </label>
+                                                        </div>
+                                                        <div class="form-check form-check-inline">
+                                                            <input class="form-check-input" type="radio" name="locationPrecision" id="precisionExact" value="@LocationPrecision.Precise" 
+                                                                   checked="@(_locationPrecision == LocationPrecision.Precise)" @onchange="() => _locationPrecision = LocationPrecision.Precise" />
+                                                            <label class="form-check-label" for="precisionExact">
+                                                                Exact Location
+                                                            </label>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div class="mb-3">
+                                                    <div class="form-check">
+                                                        <input class="form-check-input" type="checkbox" id="useLocation" checked="@_useGeolocation" @onchange="e => _useGeolocation = (bool)e.Value" />
+                                                        <label class="form-check-label" for="useLocation">
+                                                            Include my current location
+                                                        </label>
+                                                    </div>
+                                                </div>
+
+                                                <div class="mb-3">
+                                                    <label for="notes" class="form-label">Notes (Optional)</label>
+                                                    <textarea class="form-control" id="notes" rows="3" @bind="_notes"></textarea>
+                                                </div>
+
+                                                @if (_geoLocationError != null)
+                                                {
+                                                    <div class="alert alert-warning">
+                                                        <i class="bi bi-exclamation-triangle me-2"></i>
+                                                        @_geoLocationError
+                                                    </div>
+                                                }
+
+                                                <div class="d-flex justify-content-between">
+                                                    <button class="btn btn-secondary" @onclick="CancelCheckIn">Cancel</button>
+                                                    <button class="btn btn-primary" @onclick="SubmitCheckIn" disabled="@_isSubmitting">
+                                                        @if (_isSubmitting)
+                                                        {
+                                                            <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                                                            <span>Submitting...</span>
+                                                        }
+                                                        else
+                                                        {
+                                                            <span>Submit Check-in</span>
+                                                        }
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+
+                        @if (_latestCheckIn != null)
+                        {
+                            <div class="card mt-3">
+                                <div class="card-header bg-light">
+                                    <h5 class="mb-0">Latest Check-in</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <p class="mb-1">
+                                                <strong>Timestamp:</strong> @_latestCheckIn.Timestamp.LocalDateTime.ToString("g")
+                                            </p>
+                                            <p class="mb-1">
+                                                <strong>Status:</strong>
+                                                @if (_latestCheckIn.Status == SafetyStatus.OK)
+                                                {
+                                                    <span class="badge bg-success">Safe</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-danger">Needs Assistance</span>
+                                                }
+                                            </p>
+                                            @if (!string.IsNullOrEmpty(_latestCheckIn.Notes))
+                                            {
+                                                <p class="mb-0">
+                                                    <strong>Notes:</strong> @_latestCheckIn.Notes
+                                                </p>
+                                            }
+                                        </div>
+                                        <div>
+                                            @if (_latestCheckIn.State == CheckInState.Submitted)
+                                            {
+                                                <span class="badge bg-primary">Submitted</span>
+                                            }
+                                            else if (_latestCheckIn.State == CheckInState.Acknowledged)
+                                            {
+                                                <span class="badge bg-info">Acknowledged</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge bg-success">Resolved</span>
+                                            }
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    }
+                    else
+                    {
+                        <div class="alert alert-warning">
+                            <strong>User data could not be loaded.</strong> Please try refreshing the page.
+                        </div>
+                    }
+
+                    @if (_loadingErrorMessage != null)
+                    {
+                        <div class="alert alert-danger mt-3">
+                            <strong>Error:</strong> @_loadingErrorMessage
+                        </div>
+                    }
+                </div>
+
+                <div class="col-md-4">
+                    <div class="card">
+                        <div class="card-header bg-light">
+                            <h5 class="mb-0">Recent Activity</h5>
+                        </div>
+                        <div class="card-body">
+                            @if (_checkInHistory == null || !_checkInHistory.Any())
+                            {
+                                <p class="text-muted">No recent check-ins found.</p>
+                            }
+                            else
+                            {
+                                <div class="list-group">
+                                    @foreach (var checkIn in _checkInHistory.Take(5))
+                                    {
+                                        <div class="list-group-item list-group-item-action">
+                                            <div class="d-flex w-100 justify-content-between">
+                                                <h6 class="mb-1">
+                                                    @if (checkIn.Status == SafetyStatus.OK)
+                                                    {
+                                                        <span class="badge bg-success me-2">Safe</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="badge bg-danger me-2">Needs Assistance</span>
+                                                    }
+                                                    Check-in
+                                                </h6>
+                                                <small>@((DateTime.Now - checkIn.Timestamp.LocalDateTime).TotalHours < 24 ? checkIn.Timestamp.LocalDateTime.ToString("t") : checkIn.Timestamp.LocalDateTime.ToString("d"))</small>
+                                            </div>
+                                            @if (!string.IsNullOrEmpty(checkIn.Notes))
+                                            {
+                                                <p class="mb-1">@(checkIn.Notes.Length > 50 ? checkIn.Notes.Substring(0, 47) + "..." : checkIn.Notes)</p>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <div class="container mt-5">
+            <div class="row">
+                <div class="col-md-6 offset-md-3 text-center">
+                    <h1>Employee Check-in</h1>
+                    <p class="lead">Please log in to access the check-in system.</p>
+                    <button class="btn btn-primary" @onclick="Login">Login</button>
+                </div>
+            </div>
+        </div>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private User? _currentUser;
+    private string? _userPhoto;
+    private bool _isLoading = true;
+    private bool _isCheckingIn = false;
+    private bool _isSubmitting = false;
+    private bool _useGeolocation = true;
+    private SafetyStatus _safetyStatus = SafetyStatus.OK;
+    private LocationPrecision _locationPrecision = LocationPrecision.CityWide;
+    private string? _notes;
+    private string? _geoLocationError;
+    private CheckInRecord? _latestCheckIn;
+    private List<CheckInRecord>? _checkInHistory;
+    private string? _loadingErrorMessage;
+    
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadUserDataAsync();
+    }
+
+    private async Task LoadUserDataAsync()
+    {
+        try
+        {
+            _isLoading = true;
+            _loadingErrorMessage = null;
+            
+            Console.WriteLine("Loading user data from Graph API...");
+            _currentUser = await GraphService.GetCurrentUserAsync();
+            Console.WriteLine($"User data loaded: {_currentUser?.DisplayName ?? "null"}");
+            
+            if (_currentUser != null)
+            {
+                Console.WriteLine("Loading user photo...");
+                _userPhoto = await GraphService.GetUserPhotoAsync();
+                
+                Console.WriteLine("Loading latest check-in...");
+                try
+                {
+                    _latestCheckIn = await CheckInService.GetLatestCheckInAsync();
+                    Console.WriteLine($"Latest check-in: {(_latestCheckIn != null ? "found" : "not found")}");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error loading latest check-in: {ex.Message}");
+                    _loadingErrorMessage = "Could not load latest check-in data. The API may be unavailable.";
+                }
+                
+                Console.WriteLine("Loading check-in history...");
+                try
+                {
+                    _checkInHistory = await CheckInService.GetCheckInHistoryAsync();
+                    Console.WriteLine($"Check-in history: {(_checkInHistory?.Count ?? 0)} items");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error loading check-in history: {ex.Message}");
+                    // Don't override error message if we already have one
+                    if (_loadingErrorMessage == null)
+                    {
+                        _loadingErrorMessage = "Could not load check-in history. The API may be unavailable.";
+                    }
+                }
+            }
+            else
+            {
+                Console.WriteLine("Failed to load user data from Graph API");
+            }
+        }
+        catch (AccessTokenNotAvailableException ex)
+        {
+            Console.WriteLine("Access token not available, redirecting to login");
+            ex.Redirect();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error in LoadUserDataAsync: {ex.GetType().Name} - {ex.Message}");
+            _loadingErrorMessage = $"Error loading user data: {ex.Message}";
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged(); // Ensure UI updates when data loading completes
+        }
+    }
+
+    private void InitiateCheckIn()
+    {
+        _isCheckingIn = true;
+        _geoLocationError = null;
+    }
+
+    private void CancelCheckIn()
+    {
+        _isCheckingIn = false;
+        _notes = null;
+        _safetyStatus = SafetyStatus.OK;
+        _geoLocationError = null;
+    }
+
+    private async Task SubmitCheckIn()
+    {
+        try
+        {
+            _isSubmitting = true;
+            _geoLocationError = null;
+
+            double? latitude = null;
+            double? longitude = null;
+
+            // In a real implementation, this would use the browser's Geolocation API
+            // For this demo, we'll simulate location data
+            if (_useGeolocation)
+            {
+                try
+                {
+                    // Simulate geolocation data for demo purposes
+                    // In a real implementation, you'd use JavaScript interop to get the actual location
+                    latitude = 47.6062;  // Example: Seattle latitude
+                    longitude = -122.3321;  // Example: Seattle longitude
+                }
+                catch
+                {
+                    _geoLocationError = "Unable to get your current location. Please try again or disable location.";
+                    _isSubmitting = false;
+                    return;
+                }
+            }
+
+            var checkIn = await CheckInService.SubmitCheckInAsync(
+                latitude,
+                longitude,
+                _notes,
+                _safetyStatus,
+                _locationPrecision);
+
+            if (checkIn != null)
+            {
+                _isCheckingIn = false;
+                _notes = null;
+                _latestCheckIn = checkIn;
+                _checkInHistory = await CheckInService.GetCheckInHistoryAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            // Handle submission errors
+            Console.Error.WriteLine(ex);
+        }
+        finally
+        {
+            _isSubmitting = false;
+        }
+    }
+
+    private void Login()
+    {
+        Navigation.NavigateToLogin("authentication/login");
+    }
+}

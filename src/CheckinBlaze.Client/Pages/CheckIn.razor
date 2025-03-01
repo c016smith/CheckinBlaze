@@ -1,0 +1,164 @@
+@page "/checkin"
+@using CheckinBlaze.Client.Services
+@using CheckinBlaze.Shared.Models
+@using Microsoft.AspNetCore.Authorization
+@inject CheckInService CheckInService
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+@attribute [Authorize]
+
+<h3>Check In</h3>
+
+<div class="alert alert-info" role="alert">
+    Your current location will be used for the check-in. Please ensure location services are enabled.
+</div>
+
+@if (isLoading)
+{
+    <div class="spinner-border" role="status">
+        <span class="visually-hidden">Loading...</span>
+    </div>
+}
+else
+{
+    <div class="row">
+        <div class="col-md-6">
+            <div class="mb-3">
+                <label for="status" class="form-label">Status</label>
+                <select class="form-select" id="status" @bind="status">
+                    @foreach (var value in Enum.GetValues(typeof(SafetyStatus)))
+                    {
+                        <option value="@value">@value</option>
+                    }
+                </select>
+            </div>
+
+            <div class="mb-3">
+                <label for="precision" class="form-label">Location Precision</label>
+                <select class="form-select" id="precision" @bind="precision">
+                    @foreach (var value in Enum.GetValues(typeof(LocationPrecision)))
+                    {
+                        <option value="@value">@value</option>
+                    }
+                </select>
+            </div>
+
+            <div class="mb-3">
+                <label for="notes" class="form-label">Notes</label>
+                <textarea class="form-control" id="notes" rows="3" @bind="notes"></textarea>
+            </div>
+
+            @if (errorMessage != null)
+            {
+                <div class="alert alert-danger" role="alert">
+                    @errorMessage
+                </div>
+            }
+
+            <button class="btn btn-primary" @onclick="SubmitCheckInAsync" disabled="@isSubmitting">
+                @if (isSubmitting)
+                {
+                    <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                    <span>Submitting...</span>
+                }
+                else
+                {
+                    <span>Submit Check-In</span>
+                }
+            </button>
+        </div>
+
+        @if (latitude.HasValue && longitude.HasValue)
+        {
+            <div class="col-md-6">
+                <div class="alert alert-success">
+                    Location acquired:
+                    <br/>
+                    Latitude: @latitude
+                    <br/>
+                    Longitude: @longitude
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private bool isLoading = true;
+    private bool isSubmitting = false;
+    private string? errorMessage;
+    private double? latitude;
+    private double? longitude;
+    private string? notes;
+    private SafetyStatus status = SafetyStatus.OK;
+    private LocationPrecision precision = LocationPrecision.Precise;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await GetLocationAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error getting location: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task GetLocationAsync()
+    {
+        try
+        {
+            var location = await JSRuntime.InvokeAsync<GeolocationResult>("getCurrentPosition");
+            if (location != null)
+            {
+                latitude = location.Latitude;
+                longitude = location.Longitude;
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error getting location: {ex.Message}";
+        }
+    }
+
+    private async Task SubmitCheckInAsync()
+    {
+        try
+        {
+            isSubmitting = true;
+            errorMessage = null;
+
+            var checkIn = await CheckInService.SubmitCheckInAsync(
+                latitude,
+                longitude,
+                notes,
+                status,
+                precision
+            );
+
+            if (checkIn != null)
+            {
+                Navigation.NavigateTo("/");
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error submitting check-in: {ex.Message}";
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+
+    private class GeolocationResult
+    {
+        public double Latitude { get; set; }
+        public double Longitude { get; set; }
+    }
+}

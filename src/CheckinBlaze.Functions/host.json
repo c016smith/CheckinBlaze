@@ -1,0 +1,28 @@
+{
+    "version": "2.0",
+    "logging": {
+        "applicationInsights": {
+            "samplingSettings": {
+                "isEnabled": true,
+                "excludedTypes": "Request"
+            },
+            "enableLiveMetricsFilters": true
+        },
+        "logLevel": {
+            "default": "Information",
+            "Function": "Debug",
+            "Host.Results": "Debug",
+            "Host.Aggregator": "Debug",
+            "Microsoft.AspNetCore.Authentication": "Debug",
+            "Microsoft.AspNetCore.Authorization": "Debug"
+        }
+    },
+    "extensions": {
+        "http": {
+            "routePrefix": "api",
+            "maxOutstandingRequests": 200,
+            "maxConcurrentRequests": 100,
+            "dynamicThrottlesEnabled": true
+        }
+    }
+}
