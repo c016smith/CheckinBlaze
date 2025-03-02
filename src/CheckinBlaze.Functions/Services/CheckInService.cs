@@ -47,11 +47,11 @@ namespace CheckinBlaze.Functions.Services
                 checkIn.Timestamp = DateTimeOffset.UtcNow;
             }
 
-            // Map to a table entity and add to the table
+            // Map to a table entity and add to the checkinrecords table
             var entity = CheckInEntity.FromModel(checkIn);
             await _checkInTable.AddEntityAsync(entity);
 
-            // Log the action
+            // Log the action in the audit log
             await _auditService.LogActionAsync(
                 requestorId,
                 checkIn.UserDisplayName,
@@ -109,14 +109,20 @@ namespace CheckinBlaze.Functions.Services
         /// </summary>
         public async Task<List<CheckInRecord>> GetCheckInHistoryAsync(string userId, int maxResults = 50)
         {
-            // Query for the user's check-ins, ordered by timestamp descending
-            var query = _checkInTable.QueryAsync<CheckInEntity>(filter: $"PartitionKey eq '{userId}'");
+            // Query for all check-ins in the last 30 days by default
+            var startDate = DateTimeOffset.UtcNow.AddDays(-30);
+            var filter = $"PartitionKey eq '{userId}' and CheckInTimestamp ge datetime'{startDate:yyyy-MM-ddTHH:mm:ssZ}'";
+            var query = _checkInTable.QueryAsync<CheckInEntity>(filter);
 
             var checkIns = new List<CheckInEntity>();
             
             await foreach (var page in query.AsPages())
             {
                 checkIns.AddRange(page.Values);
+                if (checkIns.Count >= maxResults)
+                {
+                    break;
+                }
             }
 
             return checkIns
@@ -146,7 +152,7 @@ namespace CheckinBlaze.Functions.Services
 
             var existingEntity = existingResponse.Value;
             var previousState = existingEntity.ToModel();
-            
+
             // Update only the properties that can be updated
             existingEntity.Notes = checkIn.Notes;
             existingEntity.Status = checkIn.Status.ToString();
@@ -195,7 +201,7 @@ namespace CheckinBlaze.Functions.Services
             {
                 throw new InvalidOperationException("Check-in has already been acknowledged or resolved");
             }
-
+            
             checkIn.State = CheckInState.Acknowledged;
             checkIn.AcknowledgedByUserId = acknowledgedByUserId;
             checkIn.AcknowledgedTimestamp = DateTimeOffset.UtcNow;
@@ -266,6 +272,33 @@ namespace CheckinBlaze.Functions.Services
 
             return checkIns
                 .OrderByDescending(c => c.CheckInTimestamp)
+                .Select(c => c.ToModel())
+                .ToList();
+        }
+
+        /// <summary>
+        /// Get recent check-ins across all users (for diagnostic purposes only)
+        /// </summary>
+        public async Task<List<CheckInRecord>> GetRecentCheckInsAsync(int maxResults = 10)
+        {
+            // Query for all check-ins, without filtering by user
+            var query = _checkInTable.QueryAsync<CheckInEntity>();
+            var checkIns = new List<CheckInEntity>();
+            
+            await foreach (var page in query.AsPages())
+            {
+                checkIns.AddRange(page.Values);
+                
+                // Early exit if we have enough records
+                if (checkIns.Count >= maxResults)
+                {
+                    break;
+                }
+            }
+            
+            return checkIns
+                .OrderByDescending(c => c.CheckInTimestamp)
+                .Take(maxResults)
                 .Select(c => c.ToModel())
                 .ToList();
         }

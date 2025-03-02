@@ -10,6 +10,7 @@ using System.Threading.Tasks;
 using CheckinBlaze.Functions.Middleware;
 using Microsoft.Extensions.Logging;
 using System;
+using CheckinBlaze.Shared.Constants;
 
 var host = new HostBuilder()
     .ConfigureFunctionsWorkerDefaults(workerBuilder => 
@@ -41,10 +42,10 @@ var host = new HostBuilder()
         services.AddSingleton<TableInitializationService>();
         
         // Register table clients with lowercase table names for Azurite compatibility
-        services.AddSingleton(sp => sp.GetRequiredService<TableServiceClient>().GetTableClient("checkinrecords"));
-        services.AddSingleton(sp => sp.GetRequiredService<TableServiceClient>().GetTableClient("userpreferences"));
-        services.AddSingleton(sp => sp.GetRequiredService<TableServiceClient>().GetTableClient("headcountcampaigns"));
-        services.AddSingleton(sp => sp.GetRequiredService<TableServiceClient>().GetTableClient("auditlogs"));
+        services.AddSingleton(sp => sp.GetRequiredService<TableServiceClient>().GetTableClient(AppConstants.TableNames.CheckInRecords));
+        services.AddSingleton(sp => sp.GetRequiredService<TableServiceClient>().GetTableClient(AppConstants.TableNames.UserPreferences));
+        services.AddSingleton(sp => sp.GetRequiredService<TableServiceClient>().GetTableClient(AppConstants.TableNames.HeadcountCampaigns));
+        services.AddSingleton(sp => sp.GetRequiredService<TableServiceClient>().GetTableClient(AppConstants.TableNames.AuditLogs));
 
         // Register application services in dependency order
         services.AddScoped<AuditService>();

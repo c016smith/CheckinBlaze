@@ -1,4 +1,4 @@
 #!/bin/bash
-
 # Start the functions application
-func start --script-root /Users/csmith/Documents/code/checkinBlaze/src/CheckinBlaze.Functions
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+func start --script-root "${SCRIPT_DIR}/src/CheckinBlaze.Functions"

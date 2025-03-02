@@ -46,7 +46,7 @@ namespace CheckinBlaze.Functions.Middleware
                     ValidIssuer = $"https://sts.windows.net/{tenantId}/",
                     ValidateLifetime = true,
                     NameClaimType = "name",
-                    RoleClaimType = "roles"
+                    // Removed RoleClaimType to avoid unnecessary role validation
                 };
             }
             else
@@ -94,8 +94,8 @@ namespace CheckinBlaze.Functions.Middleware
                             // Log the claims for debugging
                             _logger.LogInformation($"JWT validated. Claims: {string.Join(", ", claimsPrincipal.Claims.Select(c => $"{c.Type}={c.Value}"))}");
                             
-                            // Create a ClaimsIdentity with proper authentication
-                            var identity = new ClaimsIdentity(claimsPrincipal.Claims, "Bearer", _validationParameters.NameClaimType, _validationParameters.RoleClaimType);
+                            // Create a ClaimsIdentity with proper authentication (no role claim type)
+                            var identity = new ClaimsIdentity(claimsPrincipal.Claims, "Bearer", _validationParameters.NameClaimType, null);
                             var authenticatedPrincipal = new ClaimsPrincipal(identity);
                             
                             // Store the claims principal in the context items
