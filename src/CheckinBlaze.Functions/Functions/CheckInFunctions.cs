@@ -188,7 +188,18 @@ namespace CheckinBlaze.Functions.Functions
                 var history = await _checkInService.GetCheckInHistoryAsync(userId, maxResults);
                 // Create the response
                 var response = req.CreateResponse(HttpStatusCode.OK);
-                await response.WriteAsJsonAsync(history);
+                
+                // Always return a valid JSON array even if empty
+                if (history == null || history.Count == 0)
+                {
+                    _logger.LogInformation("No check-in history found for user {UserId}, returning empty array", userId);
+                    await response.WriteAsJsonAsync(new List<CheckInRecord>());
+                }
+                else
+                {
+                    await response.WriteAsJsonAsync(history);
+                }
+                
                 return response;
             }
             catch (System.Exception ex)
@@ -385,7 +396,18 @@ namespace CheckinBlaze.Functions.Functions
 
                 // Create the response
                 var response = req.CreateResponse(HttpStatusCode.OK);
-                await response.WriteAsJsonAsync(checkIns);
+                
+                // Always return a valid JSON array even if empty
+                if (checkIns == null || checkIns.Count == 0)
+                {
+                    _logger.LogInformation("No check-ins needing assistance found, returning empty array");
+                    await response.WriteAsJsonAsync(new List<CheckInRecord>());
+                }
+                else
+                {
+                    await response.WriteAsJsonAsync(checkIns);
+                }
+                
                 return response;
             }
             catch (System.Exception ex)
@@ -436,7 +458,18 @@ namespace CheckinBlaze.Functions.Functions
 
                 // Create the response
                 var response = req.CreateResponse(HttpStatusCode.OK);
-                await response.WriteAsJsonAsync(checkIns);
+                
+                // Always return a valid JSON array even if empty
+                if (checkIns == null || checkIns.Count == 0)
+                {
+                    _logger.LogInformation("No check-ins found for user {UserId}, returning empty array", userId);
+                    await response.WriteAsJsonAsync(new List<CheckInRecord>());
+                }
+                else
+                {
+                    await response.WriteAsJsonAsync(checkIns);
+                }
+                
                 return response;
             }
             catch (System.Exception ex)
