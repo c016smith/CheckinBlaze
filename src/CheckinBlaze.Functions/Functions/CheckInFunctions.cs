@@ -10,6 +10,8 @@ using System.Net;
 using System.Security.Claims;
 using System.Text.Json;
 using System.Threading.Tasks;
+using CheckinBlaze.Functions.Extensions;
+using System.Collections.Generic;
 
 namespace CheckinBlaze.Functions.Functions
 {
@@ -38,13 +40,17 @@ namespace CheckinBlaze.Functions.Functions
         [Function("CreateCheckIn")]
         public async Task<HttpResponseData> CreateCheckIn(
             [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "checkins")] HttpRequestData req,
-            ClaimsPrincipal claimsPrincipal)
+            FunctionContext functionContext)
         {
             _logger.LogInformation("Creating new check-in");
 
+            // Get ClaimsPrincipal from FunctionContext
+            var claimsPrincipal = functionContext.GetUser();
+
             // Verify the user is authenticated
-            if (!claimsPrincipal.Identity.IsAuthenticated)
+            if (claimsPrincipal == null || claimsPrincipal.Identity == null || !claimsPrincipal.Identity.IsAuthenticated)
             {
+                _logger.LogWarning("Unauthorized access attempt. ClaimsPrincipal is null or unauthenticated");
                 var unauthorizedResponse = req.CreateResponse(HttpStatusCode.Unauthorized);
                 await unauthorizedResponse.WriteStringAsync("Unauthorized");
                 return unauthorizedResponse;
@@ -53,6 +59,9 @@ namespace CheckinBlaze.Functions.Functions
             // Get the user ID from the claims
             var userId = claimsPrincipal.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             var userDisplayName = claimsPrincipal.FindFirst("name")?.Value ?? "Unknown User";
+            
+            // For debugging purposes
+            _logger.LogInformation($"User ID: {userId}, Display Name: {userDisplayName}");
 
             try
             {
@@ -62,10 +71,8 @@ namespace CheckinBlaze.Functions.Functions
                 {
                     PropertyNameCaseInsensitive = true
                 });
-
                 // Create the check-in
                 var createdCheckIn = await _checkInService.CreateCheckInAsync(checkIn, userId);
-
                 // Create the response
                 var response = req.CreateResponse(HttpStatusCode.Created);
                 await response.WriteAsJsonAsync(createdCheckIn);
@@ -87,13 +94,17 @@ namespace CheckinBlaze.Functions.Functions
         [Function("GetLatestCheckIn")]
         public async Task<HttpResponseData> GetLatestCheckIn(
             [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "checkins/latest")] HttpRequestData req,
-            ClaimsPrincipal claimsPrincipal)
+            FunctionContext functionContext)
         {
             _logger.LogInformation("Getting latest check-in");
 
+            // Get ClaimsPrincipal from FunctionContext
+            var claimsPrincipal = functionContext.GetUser();
+
             // Verify the user is authenticated
-            if (!claimsPrincipal.Identity.IsAuthenticated)
+            if (claimsPrincipal == null || claimsPrincipal.Identity == null || !claimsPrincipal.Identity.IsAuthenticated)
             {
+                _logger.LogWarning("Unauthorized access attempt. ClaimsPrincipal is null or unauthenticated");
                 var unauthorizedResponse = req.CreateResponse(HttpStatusCode.Unauthorized);
                 await unauthorizedResponse.WriteStringAsync("Unauthorized");
                 return unauthorizedResponse;
@@ -101,23 +112,29 @@ namespace CheckinBlaze.Functions.Functions
 
             // Get the user ID from the claims
             var userId = claimsPrincipal.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            
+            // For debugging purposes
+            _logger.LogInformation($"User ID: {userId}");
 
             try
             {
                 // Get the latest check-in
                 var latestCheckIn = await _checkInService.GetLatestCheckInAsync(userId);
-
-                // If no check-in was found, return a 404
+                
+                // Always return a 200 OK response
+                var response = req.CreateResponse(HttpStatusCode.OK);
+                
                 if (latestCheckIn == null)
                 {
-                    var notFoundResponse = req.CreateResponse(HttpStatusCode.NotFound);
-                    await notFoundResponse.WriteStringAsync("No check-ins found for the user");
-                    return notFoundResponse;
+                    // Return an empty object instead of 404 when no check-ins found
+                    _logger.LogInformation("No check-ins found for user {UserId}, returning empty result", userId);
+                    await response.WriteAsJsonAsync(new { });
                 }
-
-                // Create the response
-                var response = req.CreateResponse(HttpStatusCode.OK);
-                await response.WriteAsJsonAsync(latestCheckIn);
+                else
+                {
+                    await response.WriteAsJsonAsync(latestCheckIn);
+                }
+                
                 return response;
             }
             catch (System.Exception ex)
@@ -136,13 +153,17 @@ namespace CheckinBlaze.Functions.Functions
         [Function("GetCheckInHistory")]
         public async Task<HttpResponseData> GetCheckInHistory(
             [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "checkins/history")] HttpRequestData req,
-            ClaimsPrincipal claimsPrincipal)
+            FunctionContext functionContext)
         {
             _logger.LogInformation("Getting check-in history");
 
+            // Get ClaimsPrincipal from FunctionContext
+            var claimsPrincipal = functionContext.GetUser();
+
             // Verify the user is authenticated
-            if (!claimsPrincipal.Identity.IsAuthenticated)
+            if (claimsPrincipal == null || claimsPrincipal.Identity == null || !claimsPrincipal.Identity.IsAuthenticated)
             {
+                _logger.LogWarning("Unauthorized access attempt. ClaimsPrincipal is null or unauthenticated");
                 var unauthorizedResponse = req.CreateResponse(HttpStatusCode.Unauthorized);
                 await unauthorizedResponse.WriteStringAsync("Unauthorized");
                 return unauthorizedResponse;
@@ -150,6 +171,9 @@ namespace CheckinBlaze.Functions.Functions
 
             // Get the user ID from the claims
             var userId = claimsPrincipal.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            
+            // For debugging purposes
+            _logger.LogInformation($"User ID: {userId}");
 
             try
             {
@@ -160,10 +184,8 @@ namespace CheckinBlaze.Functions.Functions
                 {
                     int.TryParse(maxResultsStr, out maxResults);
                 }
-
                 // Get check-in history
                 var history = await _checkInService.GetCheckInHistoryAsync(userId, maxResults);
-
                 // Create the response
                 var response = req.CreateResponse(HttpStatusCode.OK);
                 await response.WriteAsJsonAsync(history);
@@ -186,13 +208,17 @@ namespace CheckinBlaze.Functions.Functions
         public async Task<HttpResponseData> UpdateCheckIn(
             [HttpTrigger(AuthorizationLevel.Anonymous, "put", Route = "checkins/{checkInId}")] HttpRequestData req,
             string checkInId,
-            ClaimsPrincipal claimsPrincipal)
+            FunctionContext functionContext)
         {
             _logger.LogInformation($"Updating check-in {checkInId}");
 
+            // Get ClaimsPrincipal from FunctionContext
+            var claimsPrincipal = functionContext.GetUser();
+
             // Verify the user is authenticated
-            if (!claimsPrincipal.Identity.IsAuthenticated)
+            if (claimsPrincipal == null || claimsPrincipal.Identity == null || !claimsPrincipal.Identity.IsAuthenticated)
             {
+                _logger.LogWarning("Unauthorized access attempt. ClaimsPrincipal is null or unauthenticated");
                 var unauthorizedResponse = req.CreateResponse(HttpStatusCode.Unauthorized);
                 await unauthorizedResponse.WriteStringAsync("Unauthorized");
                 return unauthorizedResponse;
@@ -240,13 +266,17 @@ namespace CheckinBlaze.Functions.Functions
             [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "checkins/{userId}/{checkInId}/acknowledge")] HttpRequestData req,
             string userId,
             string checkInId,
-            ClaimsPrincipal claimsPrincipal)
+            FunctionContext functionContext)
         {
             _logger.LogInformation($"Acknowledging check-in {checkInId}");
 
+            // Get ClaimsPrincipal from FunctionContext
+            var claimsPrincipal = functionContext.GetUser();
+
             // Verify the user is authenticated
-            if (!claimsPrincipal.Identity.IsAuthenticated)
+            if (claimsPrincipal == null || claimsPrincipal.Identity == null || !claimsPrincipal.Identity.IsAuthenticated)
             {
+                _logger.LogWarning("Unauthorized access attempt. ClaimsPrincipal is null or unauthenticated");
                 var unauthorizedResponse = req.CreateResponse(HttpStatusCode.Unauthorized);
                 await unauthorizedResponse.WriteStringAsync("Unauthorized");
                 return unauthorizedResponse;
@@ -285,13 +315,17 @@ namespace CheckinBlaze.Functions.Functions
             [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "checkins/{userId}/{checkInId}/resolve")] HttpRequestData req,
             string userId,
             string checkInId,
-            ClaimsPrincipal claimsPrincipal)
+            FunctionContext functionContext)
         {
             _logger.LogInformation($"Resolving check-in {checkInId}");
 
+            // Get ClaimsPrincipal from FunctionContext
+            var claimsPrincipal = functionContext.GetUser();
+
             // Verify the user is authenticated
-            if (!claimsPrincipal.Identity.IsAuthenticated)
+            if (claimsPrincipal == null || claimsPrincipal.Identity == null || !claimsPrincipal.Identity.IsAuthenticated)
             {
+                _logger.LogWarning("Unauthorized access attempt. ClaimsPrincipal is null or unauthenticated");
                 var unauthorizedResponse = req.CreateResponse(HttpStatusCode.Unauthorized);
                 await unauthorizedResponse.WriteStringAsync("Unauthorized");
                 return unauthorizedResponse;
@@ -328,13 +362,17 @@ namespace CheckinBlaze.Functions.Functions
         [Function("GetNeedsAssistanceCheckIns")]
         public async Task<HttpResponseData> GetNeedsAssistanceCheckIns(
             [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "checkins/needsassistance")] HttpRequestData req,
-            ClaimsPrincipal claimsPrincipal)
+            FunctionContext functionContext)
         {
             _logger.LogInformation("Getting check-ins that need assistance");
 
+            // Get ClaimsPrincipal from FunctionContext
+            var claimsPrincipal = functionContext.GetUser();
+
             // Verify the user is authenticated
-            if (!claimsPrincipal.Identity.IsAuthenticated)
+            if (claimsPrincipal == null || claimsPrincipal.Identity == null || !claimsPrincipal.Identity.IsAuthenticated)
             {
+                _logger.LogWarning("Unauthorized access attempt. ClaimsPrincipal is null or unauthenticated");
                 var unauthorizedResponse = req.CreateResponse(HttpStatusCode.Unauthorized);
                 await unauthorizedResponse.WriteStringAsync("Unauthorized");
                 return unauthorizedResponse;
@@ -367,13 +405,17 @@ namespace CheckinBlaze.Functions.Functions
         public async Task<HttpResponseData> GetUserCheckIns(
             [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "checkins/user/{userId}")] HttpRequestData req,
             string userId,
-            ClaimsPrincipal claimsPrincipal)
+            FunctionContext functionContext)
         {
             _logger.LogInformation($"Getting check-ins for user {userId}");
 
+            // Get ClaimsPrincipal from FunctionContext
+            var claimsPrincipal = functionContext.GetUser();
+
             // Verify the user is authenticated
-            if (!claimsPrincipal.Identity.IsAuthenticated)
+            if (claimsPrincipal == null || claimsPrincipal.Identity == null || !claimsPrincipal.Identity.IsAuthenticated)
             {
+                _logger.LogWarning("Unauthorized access attempt. ClaimsPrincipal is null or unauthenticated");
                 var unauthorizedResponse = req.CreateResponse(HttpStatusCode.Unauthorized);
                 await unauthorizedResponse.WriteStringAsync("Unauthorized");
                 return unauthorizedResponse;
