@@ -29,7 +29,6 @@ namespace CheckinBlaze.Functions.Middleware
             {
                 _logger.LogInformation($"Initializing JWT Authentication with TenantId: {tenantId} and ClientId: {clientId}");
                 
-                // Set up OpenID Connect configuration
                 var authority = $"https://login.microsoftonline.com/{tenantId}/v2.0";
                 var metadataAddress = $"{authority}/.well-known/openid-configuration";
                 
@@ -46,7 +45,7 @@ namespace CheckinBlaze.Functions.Middleware
                     ValidIssuer = $"https://sts.windows.net/{tenantId}/",
                     ValidateLifetime = true,
                     NameClaimType = "name",
-                    // Removed RoleClaimType to avoid unnecessary role validation
+                    RoleClaimType = "roles" // Adding role claim type back but won't require specific roles
                 };
             }
             else
@@ -68,54 +67,50 @@ namespace CheckinBlaze.Functions.Middleware
 
             try
             {
-                // Get the Authorization header from the request
                 var httpRequestData = await context.GetHttpRequestDataAsync();
                 if (httpRequestData != null && httpRequestData.Headers.TryGetValues("Authorization", out var authHeaderValues))
                 {
                     var authHeader = authHeaderValues.FirstOrDefault();
                     if (!string.IsNullOrEmpty(authHeader) && authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
                     {
-                        _logger.LogInformation("Found Bearer token in request");
                         var token = authHeader.Substring("Bearer ".Length).Trim();
-                        
-                        // Get the OpenID Connect configuration
                         var openIdConfig = await _configManager.GetConfigurationAsync(CancellationToken.None);
-                        
-                        // Update validation parameters with signing keys
                         var validationParams = _validationParameters.Clone();
                         validationParams.IssuerSigningKeys = openIdConfig.SigningKeys;
                         
                         try
                         {
-                            // Validate the token
                             var handler = new JwtSecurityTokenHandler();
                             var claimsPrincipal = handler.ValidateToken(token, validationParams, out var validatedToken);
                             
-                            // Log the claims for debugging
-                            _logger.LogInformation($"JWT validated. Claims: {string.Join(", ", claimsPrincipal.Claims.Select(c => $"{c.Type}={c.Value}"))}");
+                            // Create a new identity with just the essential claims
+                            var claims = new List<Claim>();
                             
-                            // Create a ClaimsIdentity with proper authentication (no role claim type)
-                            var identity = new ClaimsIdentity(claimsPrincipal.Claims, "Bearer", _validationParameters.NameClaimType, null);
+                            // Add required claims
+                            var nameIdentifier = claimsPrincipal.FindFirst(ClaimTypes.NameIdentifier);
+                            var name = claimsPrincipal.FindFirst("name");
+                            var email = claimsPrincipal.FindFirst(ClaimTypes.Email) ?? claimsPrincipal.FindFirst("upn");
+                            
+                            if (nameIdentifier != null) claims.Add(nameIdentifier);
+                            if (name != null) claims.Add(name);
+                            if (email != null) claims.Add(email);
+                            
+                            // Add any roles if they exist, but don't require them
+                            var roles = claimsPrincipal.FindAll(ClaimTypes.Role);
+                            claims.AddRange(roles);
+                            
+                            // Create identity and principal
+                            var identity = new ClaimsIdentity(claims, "Bearer", "name", ClaimTypes.Role);
                             var authenticatedPrincipal = new ClaimsPrincipal(identity);
                             
-                            // Store the claims principal in the context items
                             context.Items["ClaimsPrincipal"] = authenticatedPrincipal;
-                            _logger.LogInformation("JWT token validated successfully");
+                            _logger.LogInformation($"JWT token validated for user {name?.Value ?? "Unknown"}");
                         }
                         catch (SecurityTokenException ex)
                         {
                             _logger.LogWarning(ex, "Security token validation failed");
                         }
                     }
-                    else
-                    {
-                        _logger.LogWarning("Invalid Authorization header format: {AuthHeader}", 
-                            string.IsNullOrEmpty(authHeader) ? "(empty)" : authHeader);
-                    }
-                }
-                else
-                {
-                    _logger.LogWarning("No Authorization header found");
                 }
             }
             catch (Exception ex)

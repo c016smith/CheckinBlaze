@@ -11,6 +11,8 @@ using CheckinBlaze.Functions.Middleware;
 using Microsoft.Extensions.Logging;
 using System;
 using CheckinBlaze.Shared.Constants;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization.Infrastructure;
 
 var host = new HostBuilder()
     .ConfigureFunctionsWorkerDefaults(workerBuilder => 
@@ -56,6 +58,14 @@ var host = new HostBuilder()
         // Add Authorization and Routing services
         services.AddAuthorization();
         services.AddRouting();
+
+        // Add Authorization with default policy
+        services.AddAuthorization(options =>
+        {
+            options.DefaultPolicy = new AuthorizationPolicy(
+                new[] { new DenyAnonymousAuthorizationRequirement() },
+                new[] { "Bearer" });
+        });
 
         // Add CORS policies
         services.AddCors(options =>

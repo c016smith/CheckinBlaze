@@ -4,7 +4,6 @@ using Microsoft.Extensions.Logging;
 using System.Net;
 using CheckinBlaze.Functions.Services;
 using System.Threading.Tasks;
-using System.Collections.Generic;
 using System;
 using CheckinBlaze.Shared.Models;
 
@@ -65,62 +64,6 @@ namespace CheckinBlaze.Functions.Functions
             response.Headers.Add("Content-Type", "text/plain; charset=utf-8");
             response.WriteString("Functions host is running!");
             return response;
-        }
-        
-        /// <summary>
-        /// Test endpoint to retrieve check-ins from storage without authentication
-        /// FOR TESTING PURPOSES ONLY - DO NOT USE IN PRODUCTION
-        /// </summary>
-        [Function("GetCheckInsTest")]
-        public async Task<HttpResponseData> GetCheckInsTest(
-            [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "diagnostic/checkins")] HttpRequestData req)
-        {
-            _logger.LogWarning("DIAGNOSTIC ENDPOINT: Accessing check-in data without authentication");
-            
-            try
-            {
-                // Parse the query parameters
-                int maxResults = 10; // Default limit
-                string maxResultsStr = req.Query["limit"];
-                if (!string.IsNullOrEmpty(maxResultsStr) && int.TryParse(maxResultsStr, out int parsedLimit))
-                {
-                    maxResults = Math.Min(parsedLimit, 100); // Cap at 100 for performance
-                }
-                
-                // Get all check-ins
-                _logger.LogInformation($"Retrieving up to {maxResults} recent check-ins for diagnostic purposes");
-                var checkIns = await _checkInService.GetRecentCheckInsAsync(maxResults);
-                
-                // Create the response
-                var response = req.CreateResponse(HttpStatusCode.OK);
-                
-                // Always return a valid JSON array even if empty
-                if (checkIns == null || checkIns.Count == 0)
-                {
-                    _logger.LogInformation("No check-ins found, returning empty array");
-                    await response.WriteAsJsonAsync(new List<CheckInRecord>());
-                }
-                else
-                {
-                    _logger.LogInformation($"Retrieved {checkIns.Count} check-ins");
-                    await response.WriteAsJsonAsync(checkIns);
-                }
-                
-                return response;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error retrieving check-ins for diagnostic test");
-                
-                var errorResponse = req.CreateResponse(HttpStatusCode.InternalServerError);
-                await errorResponse.WriteAsJsonAsync(new 
-                { 
-                    error = "Error retrieving check-ins",
-                    details = ex.Message,
-                    stackTrace = ex.StackTrace
-                });
-                return errorResponse;
-            }
         }
     }
 }
