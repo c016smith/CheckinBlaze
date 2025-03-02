@@ -52,6 +52,19 @@ else
                 <label for="notes" class="form-label">Notes</label>
                 <textarea class="form-control" id="notes" rows="3" @bind="notes"></textarea>
             </div>
+            
+            @if (latitude.HasValue && longitude.HasValue)
+            {
+                <div class="mb-3">
+                    <div class="card">
+                        <div class="card-header">Location Details</div>
+                        <div class="card-body">
+                            <p><strong>Coordinates:</strong> @latitude.Value.ToString("F6"), @longitude.Value.ToString("F6")</p>
+                            <p><strong>City/Region:</strong> @(city ?? "Loading...")</p>
+                        </div>
+                    </div>
+                </div>
+            }
 
             @if (errorMessage != null)
             {
@@ -89,6 +102,12 @@ else
                                 ? "Showing approximate city-wide location" 
                                 : "Showing exact location")
                         </small>
+                        <div>
+                            <strong>Coordinates:</strong> @latitude, @longitude
+                        </div>
+                        <div>
+                            <strong>City:</strong> @city
+                        </div>
                     </div>
                 </div>
             </div>
@@ -105,6 +124,7 @@ else
     private string? notes;
     private SafetyStatus status = SafetyStatus.OK;
     private LocationPrecision precision = LocationPrecision.Precise;
+    private string? city = "Seattle, WA"; // Default city for now
 
     protected override async Task OnInitializedAsync()
     {
@@ -132,23 +152,38 @@ else
 
     private async Task InitializeMapAsync()
     {
-        await JSRuntime.InvokeVoidAsync("initializeMap");
-        await UpdateLocationRadius();
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("console.log", "Initializing map...");
+            await JSRuntime.InvokeVoidAsync("initializeMap");
+            await UpdateLocationRadius();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error initializing map: {ex.Message}";
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error initializing map: {ex.Message}");
+        }
     }
 
     private async Task UpdateLocationRadius()
     {
         if (latitude.HasValue && longitude.HasValue)
         {
-            // Update the map with new marker and radius
-            await JSRuntime.InvokeVoidAsync("updateCheckInLocation", new
+            try
             {
-                lat = latitude.Value,
-                lng = longitude.Value,
-                isPrecise = precision == LocationPrecision.Precise,
-                // Use a smaller radius for precise location, larger for city-wide
-                radiusMeters = precision == LocationPrecision.Precise ? 100 : 5000
-            });
+                // Update the map with new marker and radius
+                await JSRuntime.InvokeVoidAsync("console.log", "Updating location...");
+                await JSRuntime.InvokeVoidAsync("updateCheckInLocation", 
+                    latitude.Value, 
+                    longitude.Value,
+                    precision == LocationPrecision.Precise,
+                    precision == LocationPrecision.Precise ? 100 : 5000);
+            }
+            catch (Exception ex)
+            {
+                errorMessage = $"Error updating location: {ex.Message}";
+                await JSRuntime.InvokeVoidAsync("console.error", $"Error updating location: {ex.Message}");
+            }
         }
     }
 
@@ -156,16 +191,31 @@ else
     {
         try
         {
+            await JSRuntime.InvokeVoidAsync("console.log", "Getting location...");
             var location = await JSRuntime.InvokeAsync<GeolocationResult>("getCurrentPosition");
+            
             if (location != null)
             {
                 latitude = location.Latitude;
                 longitude = location.Longitude;
+                await JSRuntime.InvokeVoidAsync("console.log", $"Got location: {latitude}, {longitude}");
+                
+                // In a real app, we would use a geocoding service to get the city
+                // For now, we'll hardcode it based on the coordinates
+                if (latitude > 47 && latitude < 48 && longitude > -123 && longitude < -122)
+                {
+                    city = "Seattle, WA";
+                }
+                else
+                {
+                    city = "Unknown Location";
+                }
             }
         }
         catch (Exception ex)
         {
             errorMessage = $"Error getting location: {ex.Message}";
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error getting location: {ex.Message}");
         }
     }
 

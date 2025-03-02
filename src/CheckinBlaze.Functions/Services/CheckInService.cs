@@ -109,21 +109,21 @@ namespace CheckinBlaze.Functions.Services
         /// </summary>
         public async Task<List<CheckInRecord>> GetCheckInHistoryAsync(string userId, int maxResults = 50)
         {
-            // Query for all check-ins in the last 30 days by default
-            var startDate = DateTimeOffset.UtcNow.AddDays(-30);
-            var filter = $"PartitionKey eq '{userId}' and CheckInTimestamp ge datetime'{startDate:yyyy-MM-ddTHH:mm:ssZ}'";
-            var query = _checkInTable.QueryAsync<CheckInEntity>(filter);
+            // Query for all check-ins with either user ID format
+            // Some systems use Entra ID (AAD) format, others use the raw user ID
+            var query = _checkInTable.QueryAsync<CheckInEntity>();
 
             var checkIns = new List<CheckInEntity>();
             
             await foreach (var page in query.AsPages())
             {
                 checkIns.AddRange(page.Values);
-                if (checkIns.Count >= maxResults)
-                {
-                    break;
-                }
             }
+
+            // Filter by user ID after retrieval to handle both formats
+            checkIns = checkIns
+                .Where(c => c.UserId == userId || c.PartitionKey == userId)
+                .ToList();
 
             return checkIns
                 .OrderByDescending(c => c.CheckInTimestamp)
