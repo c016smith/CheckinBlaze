@@ -28,24 +28,43 @@ builder.Services.AddMsalAuthentication(options =>
     options.ProviderOptions.Cache.CacheLocation = "sessionStorage";
 });
 
-// Configure HTTP client for Functions API with direct access (no auth required for now)
+// Configure HTTP client for Functions API with authentication
 builder.Services.AddHttpClient("CheckinBlazeFunctions", client => 
 {
     client.BaseAddress = new Uri(functionsBaseUrl);
+})
+.AddHttpMessageHandler(sp => 
+{
+    return sp.GetRequiredService<AuthorizationMessageHandler>()
+        .ConfigureHandler(
+            authorizedUrls: new[] { functionsBaseUrl },
+            scopes: new[] { "api://4b781c1c-0b04-4c3b-ad66-427458e9f98d/user_impersonation" });
 });
 
-// Configure Microsoft Graph client
-builder.Services.AddScoped<GraphServiceClient>(sp =>
+// Configure HTTP client for Microsoft Graph with authentication
+builder.Services.AddHttpClient("GraphClient", client =>
 {
-    var handler = sp.GetRequiredService<AuthorizationMessageHandler>()
+    // Fix: Use BaseApiUrl instead of BaseUrl to include the API version
+    client.BaseAddress = new Uri(AppConstants.GraphApi.BaseApiUrl);
+})
+.AddHttpMessageHandler(sp =>
+{
+    return sp.GetRequiredService<AuthorizationMessageHandler>()
         .ConfigureHandler(
             authorizedUrls: new[] { AppConstants.GraphApi.BaseUrl },
             scopes: new[] { 
                 $"{AppConstants.GraphApi.BaseUrl}/{AppConstants.ApiScopes.UserRead}",
                 $"{AppConstants.GraphApi.BaseUrl}/{AppConstants.ApiScopes.UserReadBasicAll}"
             });
+});
 
-    return new GraphServiceClient(new HttpClient(handler));
+// Configure Microsoft Graph client
+builder.Services.AddScoped<GraphServiceClient>(sp =>
+{
+    var httpClient = sp.GetRequiredService<IHttpClientFactory>()
+        .CreateClient("GraphClient");
+    
+    return new GraphServiceClient(httpClient);
 });
 
 // Register services

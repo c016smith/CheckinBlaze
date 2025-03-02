@@ -7,9 +7,16 @@ using Azure.Data.Tables;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Identity.Abstractions;
 using System.Threading.Tasks;
+using CheckinBlaze.Functions.Middleware;
+using Microsoft.Extensions.Logging;
+using System;
 
 var host = new HostBuilder()
-    .ConfigureFunctionsWorkerDefaults()
+    .ConfigureFunctionsWorkerDefaults(workerBuilder => 
+    {
+        // Add our custom JWT authentication middleware to the request pipeline
+        workerBuilder.UseMiddleware<JwtAuthenticationMiddleware>();
+    })
     .ConfigureAppConfiguration((context, config) =>
     {
         config.AddJsonFile("local.settings.json", optional: true, reloadOnChange: true);
@@ -29,7 +36,12 @@ var host = new HostBuilder()
             throw new ArgumentNullException("connectionString", "AzureTableStorageConnection is not set in the configuration.");
         }
         services.AddSingleton(new TableServiceClient(tableConnectionString));
-        services.AddSingleton(sp => sp.GetRequiredService<TableServiceClient>().GetTableClient("checkins"));
+        
+        // Add the TableInitializationService
+        services.AddSingleton<TableInitializationService>();
+        
+        // Register table clients with lowercase table names for Azurite compatibility
+        services.AddSingleton(sp => sp.GetRequiredService<TableServiceClient>().GetTableClient("checkinrecords"));
         services.AddSingleton(sp => sp.GetRequiredService<TableServiceClient>().GetTableClient("userpreferences"));
         services.AddSingleton(sp => sp.GetRequiredService<TableServiceClient>().GetTableClient("headcountcampaigns"));
         services.AddSingleton(sp => sp.GetRequiredService<TableServiceClient>().GetTableClient("auditlogs"));
@@ -58,5 +70,19 @@ var host = new HostBuilder()
         });
     })
     .Build();
+
+// Initialize Azure Table Storage tables
+var logger = host.Services.GetRequiredService<ILogger<Program>>();
+try
+{
+    logger.LogInformation("Initializing application tables...");
+    var tableInitService = host.Services.GetRequiredService<TableInitializationService>();
+    tableInitService.InitializeTablesAsync().GetAwaiter().GetResult();
+    logger.LogInformation("Table initialization completed successfully");
+}
+catch (Exception ex)
+{
+    logger.LogError(ex, "Error initializing tables. Application may not function correctly.");
+}
 
 await host.RunAsync();
