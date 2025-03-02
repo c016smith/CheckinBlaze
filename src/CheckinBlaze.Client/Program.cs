@@ -6,6 +6,7 @@ using CheckinBlaze.Shared.Constants;
 using Microsoft.Graph;
 using CheckinBlaze.Client.Services;
 using Microsoft.Extensions.Logging;
+using Microsoft.AspNetCore.Authorization;
 
 var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<App>("#app");
@@ -21,11 +22,19 @@ var functionsBaseUrl = builder.Configuration["ApiBaseUrl"] ?? "http://localhost:
 builder.Services.AddMsalAuthentication(options =>
 {
     builder.Configuration.Bind("AzureAd", options.ProviderOptions.Authentication);
-    options.ProviderOptions.DefaultAccessTokenScopes.Add("api://4b781c1c-0b04-4c3b-ad66-427458e9f98d/user_impersonation");
+    options.ProviderOptions.DefaultAccessTokenScopes.Add(AuthorizationConstants.Scopes.AppAccess);
     options.ProviderOptions.AdditionalScopesToConsent.Add($"{AppConstants.GraphApi.BaseUrl}/{AppConstants.ApiScopes.UserRead}");
     options.ProviderOptions.AdditionalScopesToConsent.Add($"{AppConstants.GraphApi.BaseUrl}/{AppConstants.ApiScopes.UserReadBasicAll}");
     options.ProviderOptions.LoginMode = "redirect";
     options.ProviderOptions.Cache.CacheLocation = "sessionStorage";
+});
+
+// Configure authorization policies
+builder.Services.AddAuthorizationCore(options =>
+{
+    // Add a simple authenticated user policy that doesn't require specific roles
+    options.AddPolicy(AuthorizationConstants.Policies.AuthenticatedUser, 
+        policy => policy.RequireAuthenticatedUser());
 });
 
 // Configure HTTP client for Functions API with authentication
@@ -38,7 +47,7 @@ builder.Services.AddHttpClient("CheckinBlazeFunctions", client =>
     return sp.GetRequiredService<AuthorizationMessageHandler>()
         .ConfigureHandler(
             authorizedUrls: new[] { functionsBaseUrl },
-            scopes: new[] { "api://4b781c1c-0b04-4c3b-ad66-427458e9f98d/user_impersonation" });
+            scopes: new[] { AuthorizationConstants.Scopes.AppAccess });
 });
 
 // Configure HTTP client for Microsoft Graph with authentication

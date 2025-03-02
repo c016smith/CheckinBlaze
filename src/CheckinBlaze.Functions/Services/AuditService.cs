@@ -27,10 +27,10 @@ namespace CheckinBlaze.Functions.Services
             AuditActionType actionType, 
             string entityType, 
             string entityId, 
-            string previousState = null, 
-            string newState = null,
-            string ipAddress = null,
-            string userAgent = null)
+            string? previousState = null, 
+            string? newState = null,
+            string? ipAddress = null,
+            string? userAgent = null)
         {
             var auditLog = new AuditLog
             {
@@ -41,15 +41,17 @@ namespace CheckinBlaze.Functions.Services
                 ActionType = actionType,
                 EntityType = entityType,
                 EntityId = entityId,
+                ChangeDescription = GetChangeDescription(actionType, entityType),
                 PreviousState = previousState,
                 NewState = newState,
                 IpAddress = ipAddress,
                 UserAgent = userAgent
             };
 
-            // Create a table entity for the audit log
+            // Create a table entity for the audit log using entity type partitioning
             var entity = new TableEntity
             {
+                // Use entity type as partition key for easier querying by type
                 PartitionKey = entityType,
                 RowKey = auditLog.Id,
                 ["UserId"] = userId,
@@ -58,7 +60,7 @@ namespace CheckinBlaze.Functions.Services
                 ["ActionType"] = actionType.ToString(),
                 ["EntityType"] = entityType,
                 ["EntityId"] = entityId,
-                ["ChangeDescription"] = GetChangeDescription(actionType, entityType),
+                ["ChangeDescription"] = auditLog.ChangeDescription,
                 ["PreviousState"] = previousState,
                 ["NewState"] = newState,
                 ["IpAddress"] = ipAddress,
@@ -73,10 +75,11 @@ namespace CheckinBlaze.Functions.Services
         /// </summary>
         public async Task<List<AuditLog>> GetEntityAuditLogsAsync(string entityType, string entityId)
         {
-            var filter = $"PartitionKey eq '{entityType}' and EntityId eq '{entityId}'";
-            var query = _auditLogTable.QueryAsync<TableEntity>(filter: filter);
-
             var auditLogs = new List<AuditLog>();
+            
+            // Query across all partitions but filter by entity type and ID
+            var filter = $"EntityType eq '{entityType}' and EntityId eq '{entityId}'";
+            var query = _auditLogTable.QueryAsync<TableEntity>(filter: filter);
             
             await foreach (var page in query.AsPages())
             {
@@ -97,11 +100,15 @@ namespace CheckinBlaze.Functions.Services
         /// </summary>
         public async Task<List<AuditLog>> GetRecentAuditLogsAsync(int maxResults = 100)
         {
-            // We can't easily sort by timestamp in Table Storage query
-            // So we'll retrieve all and sort in memory
-            var query = _auditLogTable.QueryAsync<TableEntity>();
-
             var auditLogs = new List<AuditLog>();
+            
+            // Get the current and previous month's partition keys
+            var currentMonth = DateTimeOffset.UtcNow.ToString("yyyy-MM");
+            var previousMonth = DateTimeOffset.UtcNow.AddMonths(-1).ToString("yyyy-MM");
+            
+            // Query only the last two months of data for better performance
+            var filter = $"PartitionKey ge '{previousMonth}' and PartitionKey le '{currentMonth}'";
+            var query = _auditLogTable.QueryAsync<TableEntity>(filter: filter);
             
             await foreach (var page in query.AsPages())
             {

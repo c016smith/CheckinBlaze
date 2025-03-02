@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>CheckinBlaze.Client</title>
     <base href="/" />
     <link rel="stylesheet" href="lib/bootstrap/dist/css/bootstrap.min.css" />
@@ -11,6 +11,10 @@
     <link rel="stylesheet" href="css/app.css" />
     <link rel="icon" type="image/png" href="favicon.png" />
     <link href="CheckinBlaze.Client.styles.css" rel="stylesheet" />
+    <!-- Leaflet CSS for maps -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+          crossorigin="" />
 </head>
 
 <body>
@@ -30,10 +34,155 @@
     <script src="_content/Microsoft.Authentication.WebAssembly.Msal/AuthenticationService.js"></script>
     <script src="_framework/blazor.webassembly.js"></script>
     <script src="js/geolocation.js"></script>
+    <!-- Leaflet JS for maps -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+            integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+            crossorigin=""></script>
     <script>
         window.blazorCulture = {
             get: () => window.localStorage['BlazorCulture'],
             set: (value) => window.localStorage['BlazorCulture'] = value
+        };
+
+        let map;
+        let markers = {};
+        let selectedMarkerId = null;
+        let currentLocationMarker = null;
+        let currentLocationCircle = null;
+        
+        // Initialize the map
+        window.initializeMap = function () {
+            // If the map exists already, clean it up
+            if (map) {
+                map.remove();
+            }
+            
+            // Check if map container exists
+            const mapElement = document.getElementById('map');
+            if (!mapElement) {
+                console.warn("Map element not found");
+                return;
+            }
+            
+            // Initialize the map centered on Seattle (default location)
+            map = L.map('map').setView([47.6062, -122.3321], 12);
+            
+            // Add OpenStreetMap tile layer
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+                maxZoom: 19
+            }).addTo(map);
+            
+            // Force map to recalculate size after initialization
+            setTimeout(() => {
+                map.invalidateSize();
+            }, 500);
+        };
+
+        // Update the check-in location marker and radius
+        window.updateCheckInLocation = function (location) {
+            if (!map) return;
+
+            // Remove existing marker and circle if they exist
+            if (currentLocationMarker) {
+                map.removeLayer(currentLocationMarker);
+            }
+            if (currentLocationCircle) {
+                map.removeLayer(currentLocationCircle);
+            }
+
+            // Create marker for the location
+            currentLocationMarker = L.marker([location.lat, location.lng]).addTo(map);
+
+            // Create circle to show precision radius
+            const circleOptions = {
+                color: location.isPrecise ? '#28a745' : '#ffc107',
+                fillColor: location.isPrecise ? '#28a745' : '#ffc107',
+                fillOpacity: 0.2,
+                weight: 1
+            };
+
+            currentLocationCircle = L.circle([location.lat, location.lng], {
+                radius: location.radiusMeters,
+                ...circleOptions
+            }).addTo(map);
+
+            // Fit map to show the entire circle
+            const bounds = currentLocationCircle.getBounds();
+            map.fitBounds(bounds, { padding: [50, 50] });
+        };
+        
+        // Update map markers based on check-in data
+        window.updateMapMarkers = function (checkIns) {
+            // Clear existing markers
+            for (const id in markers) {
+                map.removeLayer(markers[id]);
+            }
+            markers = {};
+            
+            // Check if we have check-ins with location data
+            if (!checkIns || checkIns.length === 0) {
+                return;
+            }
+            
+            // Add markers for each check-in with location data
+            const bounds = L.latLngBounds();
+            
+            checkIns.forEach(checkIn => {
+                // Create marker with appropriate icon based on status
+                const markerColor = checkIn.status === "OK" ? "green" : "red";
+                
+                const marker = L.circleMarker([checkIn.lat, checkIn.lng], {
+                    radius: 8,
+                    fillColor: markerColor,
+                    color: "#000",
+                    weight: 1,
+                    opacity: 1,
+                    fillOpacity: 0.8
+                }).addTo(map);
+                
+                // Add popup with info
+                marker.bindPopup(`
+                    <strong>Status: ${checkIn.status === "OK" ? "OK" : "Needs Assistance"}</strong><br>
+                    Time: ${checkIn.timestamp}<br>
+                    Precision: ${checkIn.precision}
+                `);
+                
+                // Store marker reference
+                markers[checkIn.id] = marker;
+                
+                // Add coordinates to bounds
+                bounds.extend([checkIn.lat, checkIn.lng]);
+            });
+            
+            // Fit map to bounds if we have markers
+            if (Object.keys(markers).length > 0) {
+                map.fitBounds(bounds, { padding: [50, 50] });
+            }
+        };
+        
+        // Highlight a specific marker
+        window.highlightMapMarker = function (id) {
+            // Reset previous selected marker if any
+            if (selectedMarkerId && markers[selectedMarkerId]) {
+                const prevMarker = markers[selectedMarkerId];
+                prevMarker.setStyle({
+                    weight: 1
+                });
+            }
+            
+            // Highlight new selected marker
+            if (id && markers[id]) {
+                const marker = markers[id];
+                marker.setStyle({
+                    weight: 3
+                });
+                marker.openPopup();
+                
+                selectedMarkerId = id;
+            } else {
+                selectedMarkerId = null;
+            }
         };
     </script>
 </body>

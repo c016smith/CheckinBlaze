@@ -12,17 +12,17 @@ namespace CheckinBlaze.Functions.Models
         /// <summary>
         /// Azure AD user identifier
         /// </summary>
-        public string UserId { get; set; }
+        public required string UserId { get; set; }
         
         /// <summary>
         /// User's display name
         /// </summary>
-        public string UserDisplayName { get; set; }
+        public required string UserDisplayName { get; set; }
         
         /// <summary>
         /// Email of the user who checked in
         /// </summary>
-        public string UserEmail { get; set; }
+        public required string UserEmail { get; set; }
         
         /// <summary>
         /// Check-in timestamp in UTC
@@ -42,32 +42,32 @@ namespace CheckinBlaze.Functions.Models
         /// <summary>
         /// Location accuracy level (city-wide or precise)
         /// </summary>
-        public string LocationPrecision { get; set; }
+        public required string LocationPrecision { get; set; }
         
         /// <summary>
         /// Safety status of the employee
         /// </summary>
-        public string Status { get; set; }
+        public required string Status { get; set; }
         
         /// <summary>
         /// Optional notes provided by the employee during check-in
         /// </summary>
-        public string Notes { get; set; }
+        public required string Notes { get; set; }
         
         /// <summary>
         /// Current state of the check-in in the workflow
         /// </summary>
-        public string State { get; set; }
+        public required string State { get; set; }
         
         /// <summary>
         /// ID of the headcount campaign this check-in is associated with (if any)
         /// </summary>
-        public string HeadcountCampaignId { get; set; }
+        public string? HeadcountCampaignId { get; set; }
         
         /// <summary>
         /// ID of the user who acknowledged the check-in (if State is Acknowledged)
         /// </summary>
-        public string AcknowledgedByUserId { get; set; }
+        public string? AcknowledgedByUserId { get; set; }
         
         /// <summary>
         /// Timestamp when the check-in was acknowledged
@@ -77,7 +77,7 @@ namespace CheckinBlaze.Functions.Models
         /// <summary>
         /// ID of the user who resolved the check-in (if State is Resolved)
         /// </summary>
-        public string ResolvedByUserId { get; set; }
+        public string? ResolvedByUserId { get; set; }
         
         /// <summary>
         /// Timestamp when the check-in was resolved
@@ -93,6 +93,7 @@ namespace CheckinBlaze.Functions.Models
             
             return new CheckInEntity
             {
+                // Use user ID as partition key for check-in records
                 PartitionKey = model.UserId,
                 RowKey = id,
                 UserId = model.UserId,
@@ -103,12 +104,12 @@ namespace CheckinBlaze.Functions.Models
                 Longitude = model.Longitude,
                 LocationPrecision = model.LocationPrecision.ToString(),
                 Status = model.Status.ToString(),
-                Notes = model.Notes,
+                Notes = model.Notes ?? string.Empty,
                 State = model.State.ToString(),
-                HeadcountCampaignId = model.HeadcountCampaignId,
-                AcknowledgedByUserId = model.AcknowledgedByUserId,
+                HeadcountCampaignId = model.HeadcountCampaignId ?? string.Empty,
+                AcknowledgedByUserId = model.AcknowledgedByUserId ?? string.Empty,
+                ResolvedByUserId = model.ResolvedByUserId ?? string.Empty,
                 AcknowledgedTimestamp = model.AcknowledgedTimestamp,
-                ResolvedByUserId = model.ResolvedByUserId,
                 ResolvedTimestamp = model.ResolvedTimestamp
             };
         }
@@ -127,14 +128,26 @@ namespace CheckinBlaze.Functions.Models
                 Timestamp = CheckInTimestamp,
                 Latitude = Latitude,
                 Longitude = Longitude,
-                LocationPrecision = Enum.Parse<LocationPrecision>(LocationPrecision),
-                Status = Enum.Parse<SafetyStatus>(Status),
-                Notes = Notes,
-                State = Enum.Parse<CheckInState>(State),
-                HeadcountCampaignId = HeadcountCampaignId,
-                AcknowledgedByUserId = AcknowledgedByUserId,
+                LocationPrecision = !string.IsNullOrEmpty(LocationPrecision) 
+                    ? (Enum.TryParse<LocationPrecision>(LocationPrecision, true, out var locationPrecision) 
+                        ? locationPrecision 
+                        : Shared.Models.LocationPrecision.CityWide)
+                    : Shared.Models.LocationPrecision.CityWide,
+                Status = !string.IsNullOrEmpty(Status) 
+                    ? Enum.TryParse<SafetyStatus>(Status, out var status) 
+                        ? status 
+                        : SafetyStatus.OK
+                    : SafetyStatus.OK,
+                Notes = Notes ?? string.Empty,
+                State = !string.IsNullOrEmpty(State) 
+                    ? Enum.TryParse<CheckInState>(State, out var state) 
+                        ? state 
+                        : CheckInState.Submitted
+                    : CheckInState.Submitted,
+                HeadcountCampaignId = string.IsNullOrEmpty(HeadcountCampaignId) ? null : HeadcountCampaignId,
+                AcknowledgedByUserId = string.IsNullOrEmpty(AcknowledgedByUserId) ? null : AcknowledgedByUserId,
+                ResolvedByUserId = string.IsNullOrEmpty(ResolvedByUserId) ? null : ResolvedByUserId,
                 AcknowledgedTimestamp = AcknowledgedTimestamp,
-                ResolvedByUserId = ResolvedByUserId,
                 ResolvedTimestamp = ResolvedTimestamp
             };
         }

@@ -10,10 +10,10 @@ namespace CheckinBlaze.Shared.Constants
         /// </summary>
         public static class TableNames
         {
-            public const string CheckInRecords = "CheckInRecords";
-            public const string UserPreferences = "UserPreferences";
-            public const string AuditLogs = "AuditLogs";
-            public const string HeadcountCampaigns = "HeadcountCampaigns";
+            public const string CheckInRecords = "checkinrecords";
+            public const string UserPreferences = "userpreferences";
+            public const string AuditLogs = "auditlogs";
+            public const string HeadcountCampaigns = "headcountcampaigns";
         }
         
         /// <summary>

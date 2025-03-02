@@ -1,0 +1,328 @@
+@page "/check-in-history"
+@using CheckinBlaze.Shared.Models
+@using CheckinBlaze.Client.Services
+@using Microsoft.AspNetCore.Components.WebAssembly.Authentication
+@inject CheckInService CheckInService
+@inject IJSRuntime JSRuntime
+@inject ILogger<CheckInHistory> Logger
+
+<PageTitle>Check-in History</PageTitle>
+
+<AuthorizeView>
+    <Authorized>
+        <div class="container-fluid mt-4">
+            <h1>Check-in History</h1>
+            <p class="lead">View your past check-ins and filter by date</p>
+
+            @if (_loading)
+            {
+                <div class="my-4">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <span class="ms-2">Loading check-in history...</span>
+                </div>
+            }
+            else if (_error != null)
+            {
+                <div class="alert alert-danger">
+                    <strong>Error:</strong> @_error
+                </div>
+            }
+            else
+            {
+                <div class="row mb-4">
+                    <div class="col-md-12">
+                        <div class="card">
+                            <div class="card-header bg-light">
+                                <h5 class="mb-0">Filter Check-ins</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label for="startDate" class="form-label">Start Date</label>
+                                            <input type="date" class="form-control" id="startDate" @bind="_startDate" />
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label for="endDate" class="form-label">End Date</label>
+                                            <input type="date" class="form-control" id="endDate" @bind="_endDate" />
+                                        </div>
+                                    </div>
+                                </div>
+                                <button class="btn btn-primary" @onclick="ApplyFilters">Apply Filters</button>
+                                <button class="btn btn-secondary ms-2" @onclick="ResetFilters">Reset</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card mb-4">
+                            <div class="card-header bg-light">
+                                <h5 class="mb-0">Check-in List</h5>
+                            </div>
+                            <div class="card-body p-0">
+                                @if (_filteredCheckIns == null || !_filteredCheckIns.Any())
+                                {
+                                    <div class="p-3">
+                                        <p class="text-muted mb-0">No check-ins found for the selected period.</p>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="list-group list-group-flush">
+                                        @foreach (var checkIn in _filteredCheckIns)
+                                        {
+                                            <div class="list-group-item @(checkIn.Id == _selectedCheckInId ? "active" : "")" @onclick="() => SelectCheckIn(checkIn)">
+                                                <div class="d-flex w-100 justify-content-between">
+                                                    <h6 class="mb-1">
+                                                        @if (checkIn.Status == SafetyStatus.OK)
+                                                        {
+                                                            <span class="badge bg-success me-2">OK</span>
+                                                        }
+                                                        else
+                                                        {
+                                                            <span class="badge bg-danger me-2">Needs Assistance</span>
+                                                        }
+                                                        @checkIn.Timestamp.LocalDateTime.ToString("g")
+                                                    </h6>
+                                                    <small>
+                                                        @if (checkIn.State == CheckInState.Submitted)
+                                                        {
+                                                            <span class="badge bg-primary">Submitted</span>
+                                                        }
+                                                        else if (checkIn.State == CheckInState.Acknowledged)
+                                                        {
+                                                            <span class="badge bg-info">Acknowledged</span>
+                                                        }
+                                                        else
+                                                        {
+                                                            <span class="badge bg-success">Resolved</span>
+                                                        }
+                                                    </small>
+                                                </div>
+                                                @if (!string.IsNullOrEmpty(checkIn.Notes))
+                                                {
+                                                    <p class="mb-1">@checkIn.Notes</p>
+                                                }
+                                                @if (checkIn.Latitude.HasValue && checkIn.Longitude.HasValue)
+                                                {
+                                                    <small>
+                                                        <i class="bi bi-geo-alt me-1"></i>
+                                                        Location: @(checkIn.LocationPrecision == LocationPrecision.Precise ? "Precise" : "City-wide")
+                                                    </small>
+                                                }
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header bg-light">
+                                <h5 class="mb-0">Map View</h5>
+                            </div>
+                            <div class="card-body p-0">
+                                <div id="map" style="height: 400px; width: 100%;"></div>
+                            </div>
+                        </div>
+
+                        @if (_selectedCheckIn != null)
+                        {
+                            <div class="card mt-4">
+                                <div class="card-header bg-light">
+                                    <h5 class="mb-0">Check-in Details</h5>
+                                </div>
+                                <div class="card-body">
+                                    <dl class="row mb-0">
+                                        <dt class="col-sm-4">Timestamp</dt>
+                                        <dd class="col-sm-8">@_selectedCheckIn.Timestamp.LocalDateTime.ToString("g")</dd>
+                                        
+                                        <dt class="col-sm-4">Status</dt>
+                                        <dd class="col-sm-8">
+                                            @if (_selectedCheckIn.Status == SafetyStatus.OK)
+                                            {
+                                                <span class="badge bg-success">OK</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge bg-danger">Needs Assistance</span>
+                                            }
+                                        </dd>
+                                        
+                                        <dt class="col-sm-4">State</dt>
+                                        <dd class="col-sm-8">
+                                            @if (_selectedCheckIn.State == CheckInState.Submitted)
+                                            {
+                                                <span class="badge bg-primary">Submitted</span>
+                                            }
+                                            else if (_selectedCheckIn.State == CheckInState.Acknowledged)
+                                            {
+                                                <span class="badge bg-info">Acknowledged</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge bg-success">Resolved</span>
+                                            }
+                                        </dd>
+                                        
+                                        @if (_selectedCheckIn.Latitude.HasValue && _selectedCheckIn.Longitude.HasValue)
+                                        {
+                                            <dt class="col-sm-4">Location</dt>
+                                            <dd class="col-sm-8">
+                                                @_selectedCheckIn.Latitude.Value.ToString("F6"), @_selectedCheckIn.Longitude.Value.ToString("F6")
+                                                <br />
+                                                <small>@(_selectedCheckIn.LocationPrecision == LocationPrecision.Precise ? "Precise Location" : "City-wide Location")</small>
+                                            </dd>
+                                        }
+                                        
+                                        @if (!string.IsNullOrEmpty(_selectedCheckIn.Notes))
+                                        {
+                                            <dt class="col-sm-4">Notes</dt>
+                                            <dd class="col-sm-8">@_selectedCheckIn.Notes</dd>
+                                        }
+                                    </dl>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <div class="container mt-5">
+            <div class="alert alert-warning">
+                <p>You must be logged in to view check-in history.</p>
+                <a href="authentication/login" class="btn btn-primary">Log in</a>
+            </div>
+        </div>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private List<CheckInRecord>? _checkIns;
+    private List<CheckInRecord>? _filteredCheckIns;
+    private CheckInRecord? _selectedCheckIn;
+    private string? _selectedCheckInId;
+    private bool _loading = true;
+    private string? _error;
+
+    // Filter state
+    private DateTime _startDate = DateTime.Today.AddDays(-7);
+    private DateTime _endDate = DateTime.Today;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadCheckInHistoryAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await InitializeMapAsync();
+        }
+        else if (_filteredCheckIns != null && _filteredCheckIns.Any())
+        {
+            await UpdateMapMarkersAsync();
+        }
+    }
+
+    private async Task LoadCheckInHistoryAsync()
+    {
+        try
+        {
+            _loading = true;
+            _error = null;
+            
+            _checkIns = await CheckInService.GetCheckInHistoryAsync();
+            ApplyFilters();
+        }
+        catch (AccessTokenNotAvailableException ex)
+        {
+            ex.Redirect();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading check-in history");
+            _error = $"Failed to load check-in history: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void ApplyFilters()
+    {
+        if (_checkIns == null)
+        {
+            _filteredCheckIns = new List<CheckInRecord>();
+            return;
+        }
+
+        var startDate = _startDate.Date;
+        var endDate = _endDate.Date.AddDays(1).AddSeconds(-1); // End of the selected day
+
+        _filteredCheckIns = _checkIns
+            .Where(c => c.Timestamp >= startDate && c.Timestamp <= endDate)
+            .OrderByDescending(c => c.Timestamp)
+            .ToList();
+
+        // Update selected check-in if it doesn't exist in filtered list
+        if (_selectedCheckIn != null && !_filteredCheckIns.Any(c => c.Id == _selectedCheckIn.Id))
+        {
+            _selectedCheckIn = null;
+            _selectedCheckInId = null;
+        }
+    }
+
+    private void ResetFilters()
+    {
+        _startDate = DateTime.Today.AddDays(-7);
+        _endDate = DateTime.Today;
+        ApplyFilters();
+    }
+
+    private void SelectCheckIn(CheckInRecord checkIn)
+    {
+        _selectedCheckIn = checkIn;
+        _selectedCheckInId = checkIn.Id;
+        
+        // Trigger map highlight of the selected marker
+        JSRuntime.InvokeVoidAsync("highlightMapMarker", checkIn.Id);
+    }
+
+    private async Task InitializeMapAsync()
+    {
+        // Initialize the map after the component is rendered
+        await JSRuntime.InvokeVoidAsync("initializeMap");
+    }
+
+    private async Task UpdateMapMarkersAsync()
+    {
+        // Update map markers with the filtered check-ins
+        var markers = _filteredCheckIns
+            .Where(c => c.Latitude.HasValue && c.Longitude.HasValue)
+            .Select(c => new
+            {
+                id = c.Id,
+                lat = c.Latitude.Value,
+                lng = c.Longitude.Value,
+                status = c.Status.ToString(),
+                timestamp = c.Timestamp.LocalDateTime.ToString("g"),
+                precision = c.LocationPrecision.ToString()
+            })
+            .ToArray();
+
+        await JSRuntime.InvokeVoidAsync("updateMapMarkers", markers);
+    }
+}

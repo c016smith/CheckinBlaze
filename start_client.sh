@@ -1,9 +1,9 @@
 #!/bin/bash
-
 # Start the client application
-cd /Users/csmith/Documents/code/checkinBlaze/src/CheckinBlaze.Client
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "${SCRIPT_DIR}/src/CheckinBlaze.Client"
 if [ $? -eq 0 ]; then
   dotnet run
 else
-  echo "Failed to navigate to /Users/csmith/Documents/code/checkinBlaze/src/CheckinBlaze.Client"
+  echo "Failed to navigate to Client directory"
 fi

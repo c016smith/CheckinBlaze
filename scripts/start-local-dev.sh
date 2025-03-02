@@ -1,25 +1,31 @@
 #!/bin/bash
 
-# Start local development environment using tmux
+# Get the project root directory
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-# Create a new tmux session named 'local-dev'
-tmux new-session -d -s local-dev
+echo "Starting CheckinBlaze development environment..."
 
-# Split the window into three panes
-tmux split-window -h
-tmux split-window -v
+# Kill any existing tmux sessions
+tmux kill-session -t local-dev 2>/dev/null
 
-# Run Azurite in the first pane
-tmux select-pane -t 0
-tmux send-keys 'sh ../start_azurite.sh' C-m
+# Configure tmux
+tmux set -g mouse on
+tmux set -g terminal-overrides 'xterm*:smcup@:rmcup@'
 
-# Run the functions application in the second pane
-tmux select-pane -t 1
-tmux send-keys 'sh ../start_functions.sh' C-m
+# Create a new tmux session named 'local-dev' with Azurite
+echo "Creating tmux session..."
+tmux new-session -d -s local-dev "cd '${PROJECT_ROOT}' && ./start_azurite.sh"
 
-# Run the client application in the third pane
-tmux select-pane -t 2
-tmux send-keys 'sh ../start_client.sh' C-m
+# Split vertically for Functions
+tmux split-window -v -p 66 "cd '${PROJECT_ROOT}' && sleep 5 && ./start_functions.sh"
 
-# Attach to the tmux session
+# Split again for Client
+tmux split-window -v -p 50 "cd '${PROJECT_ROOT}' && sleep 10 && ./start_client.sh"
+
+# Set mouse mode and scrolling
+tmux set-window-option -g mouse on
+
+# Set the layout and attach to the session
+tmux select-layout even-vertical
+echo "Attaching to tmux session..."
 tmux attach-session -t local-dev

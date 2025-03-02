@@ -10,17 +10,17 @@ namespace CheckinBlaze.Shared.Models
         /// <summary>
         /// Unique identifier for the audit log entry
         /// </summary>
-        public string Id { get; set; } = Guid.NewGuid().ToString();
+        public required string Id { get; set; } = Guid.NewGuid().ToString();
         
         /// <summary>
         /// Azure AD user identifier of the user who performed the action
         /// </summary>
-        public string UserId { get; set; }
+        public required string UserId { get; set; }
         
         /// <summary>
         /// Display name of the user who performed the action
         /// </summary>
-        public string UserDisplayName { get; set; }
+        public required string UserDisplayName { get; set; }
         
         /// <summary>
         /// Timestamp when the action occurred
@@ -30,12 +30,12 @@ namespace CheckinBlaze.Shared.Models
         /// <summary>
         /// The type of entity that was affected (e.g., UserPreferences, CheckIn)
         /// </summary>
-        public string EntityType { get; set; }
+        public required string EntityType { get; set; }
         
         /// <summary>
         /// The identifier of the entity that was affected
         /// </summary>
-        public string EntityId { get; set; }
+        public required string EntityId { get; set; }
         
         /// <summary>
         /// The type of action that was performed
@@ -45,27 +45,27 @@ namespace CheckinBlaze.Shared.Models
         /// <summary>
         /// Description of the changes that were made
         /// </summary>
-        public string ChangeDescription { get; set; }
+        public required string ChangeDescription { get; set; }
         
         /// <summary>
         /// Previous state of the entity (if applicable), stored as JSON
         /// </summary>
-        public string PreviousState { get; set; }
+        public string? PreviousState { get; set; }
         
         /// <summary>
         /// New state of the entity after the change, stored as JSON
         /// </summary>
-        public string NewState { get; set; }
+        public string? NewState { get; set; }
         
         /// <summary>
         /// IP address of the user who performed the action
         /// </summary>
-        public string IpAddress { get; set; }
+        public string? IpAddress { get; set; }
         
         /// <summary>
         /// User agent string of the browser/client that performed the action
         /// </summary>
-        public string UserAgent { get; set; }
+        public string? UserAgent { get; set; }
     }
     
     /// <summary>

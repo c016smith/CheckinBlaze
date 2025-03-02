@@ -127,7 +127,7 @@ namespace CheckinBlaze.Client.Services
             try
             {
                 _logger.LogInformation("Getting check-in history");
-                var response = await _httpClient.GetAsync("api/checkins/history");
+                var response = await _httpClient.GetAsync("api/checkins/history?maxResults=100");
                 
                 if (response.IsSuccessStatusCode)
                 {

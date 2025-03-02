@@ -35,12 +35,17 @@ else
 
             <div class="mb-3">
                 <label for="precision" class="form-label">Location Precision</label>
-                <select class="form-select" id="precision" @bind="precision">
+                <select class="form-select" id="precision" @bind="precision" @bind:after="UpdateLocationRadius">
                     @foreach (var value in Enum.GetValues(typeof(LocationPrecision)))
                     {
                         <option value="@value">@value</option>
                     }
                 </select>
+                <small class="form-text text-muted">
+                    @(precision == LocationPrecision.CityWide 
+                        ? "Your location will be shown at city level accuracy" 
+                        : "Your exact location will be recorded")
+                </small>
             </div>
 
             <div class="mb-3">
@@ -71,12 +76,20 @@ else
         @if (latitude.HasValue && longitude.HasValue)
         {
             <div class="col-md-6">
-                <div class="alert alert-success">
-                    Location acquired:
-                    <br/>
-                    Latitude: @latitude
-                    <br/>
-                    Longitude: @longitude
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">Your Location</h5>
+                    </div>
+                    <div class="card-body p-0">
+                        <div id="map" style="height: 400px;"></div>
+                    </div>
+                    <div class="card-footer">
+                        <small class="text-muted">
+                            @(precision == LocationPrecision.CityWide 
+                                ? "Showing approximate city-wide location" 
+                                : "Showing exact location")
+                        </small>
+                    </div>
                 </div>
             </div>
         }
@@ -106,6 +119,36 @@ else
         finally
         {
             isLoading = false;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && latitude.HasValue && longitude.HasValue)
+        {
+            await InitializeMapAsync();
+        }
+    }
+
+    private async Task InitializeMapAsync()
+    {
+        await JSRuntime.InvokeVoidAsync("initializeMap");
+        await UpdateLocationRadius();
+    }
+
+    private async Task UpdateLocationRadius()
+    {
+        if (latitude.HasValue && longitude.HasValue)
+        {
+            // Update the map with new marker and radius
+            await JSRuntime.InvokeVoidAsync("updateCheckInLocation", new
+            {
+                lat = latitude.Value,
+                lng = longitude.Value,
+                isPrecise = precision == LocationPrecision.Precise,
+                // Use a smaller radius for precise location, larger for city-wide
+                radiusMeters = precision == LocationPrecision.Precise ? 100 : 5000
+            });
         }
     }
 
