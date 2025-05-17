@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Components.WebAssembly.Authentication;
 using Moq;
 using Moq.Protected;
 using System.Net;
+using System.Linq;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Xunit;
@@ -84,6 +85,62 @@ namespace CheckinBlaze.Client.Tests
             Assert.Equal(currentUser.Id, result.InitiatedByUserId);
             Assert.Equal(currentUser.DisplayName, result.InitiatedByDisplayName);
             Assert.Equal(targetUserIds, result.TargetedUserIds);
+        }
+
+        [Fact]
+        public async Task CreateHeadcountCampaignAsync_ShouldFetchDirectReports_WhenTargetUsersNotProvided()
+        {
+            // Arrange
+            var title = "Test Campaign";
+            var description = "Test Description";
+
+            var currentUser = new Microsoft.Graph.Models.User
+            {
+                Id = "testuser",
+                DisplayName = "Test User",
+                UserPrincipalName = "test@contoso.com"
+            };
+
+            var directReports = new List<Microsoft.Graph.Models.User>
+            {
+                new Microsoft.Graph.Models.User { Id = "report1" },
+                new Microsoft.Graph.Models.User { Id = "report2" }
+            };
+
+            var expectedTargetIds = directReports.Select(u => u.Id).ToList();
+
+            _mockGraphService.Setup(s => s.GetCurrentUserAsync()).ReturnsAsync(currentUser);
+            _mockGraphService.Setup(s => s.GetDirectReportsAsync()).ReturnsAsync(directReports);
+
+            var campaignResponse = new HeadcountCampaign
+            {
+                Id = Guid.NewGuid().ToString(),
+                Title = title,
+                Description = description,
+                InitiatedByUserId = currentUser.Id,
+                InitiatedByDisplayName = currentUser.DisplayName,
+                TargetedUserIds = expectedTargetIds
+            };
+
+            _mockHttpMessageHandler
+                .Protected()
+                .Setup<Task<HttpResponseMessage>>(
+                    "SendAsync",
+                    ItExpr.IsAny<HttpRequestMessage>(),
+                    ItExpr.IsAny<CancellationToken>())
+                .ReturnsAsync(new HttpResponseMessage
+                {
+                    StatusCode = HttpStatusCode.Created,
+                    Content = new StringContent(JsonSerializer.Serialize(campaignResponse))
+                });
+
+            // Act
+            var result = await _headcountService.CreateHeadcountCampaignAsync(title, description);
+
+            // Assert
+            Assert.NotNull(result);
+            Assert.Equal(expectedTargetIds, result.TargetedUserIds);
+            _mockGraphService.Verify(s => s.GetDirectReportsAsync(), Times.Once);
         }
 
         [Fact]

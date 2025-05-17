@@ -96,7 +96,7 @@ echo "Local dev environment setup complete!"
 if [ $TABLES_CREATED -eq ${#TABLES[@]} ]; then
     echo "✅ All Azure Tables initialized successfully."
 else
-    echo "⚠️  Some Azure Tables may not have been initialized."
+    echo "⚠ Some Azure Tables may not have been initialized."
     echo "   Tables will be created automatically on first run."
 fi
 echo ""
